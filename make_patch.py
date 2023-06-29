@@ -44,57 +44,58 @@ parser.add_argument('--netClassifier', default='inceptionv3', help="The target c
 parser.add_argument('--outf', default='./logs', help='folder to output images and model checkpoints')
 parser.add_argument('--manualSeed', type=int, default=1338, help='manual seed')
 
-opt = parser.parse_args()
-print(opt)
+args = parser.parse_args()
+print(args)
 
 try:
-    os.makedirs(opt.outf)
+    os.makedirs(args.outf)
 except OSError:
     pass
 
-if opt.manualSeed is None:
-    opt.manualSeed = random.randint(1, 10000)
-print("Random Seed: ", opt.manualSeed)
-random.seed(opt.manualSeed)
-np.random.seed(opt.manualSeed)
-torch.manual_seed(opt.manualSeed)
-if opt.cuda:
-    torch.cuda.manual_seed_all(opt.manualSeed)
+if args.manualSeed is None:
+    args.manualSeed = random.randint(1, 10000)
+print("Random Seed: ", args.manualSeed)
+random.seed(args.manualSeed)
+np.random.seed(args.manualSeed)
+torch.manual_seed(args.manualSeed)
+if args.cuda:
+    torch.cuda.manual_seed_all(args.manualSeed)
 
 cudnn.benchmark = True
 
-if torch.cuda.is_available() and not opt.cuda:
+if torch.cuda.is_available() and not args.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-target = opt.target
-conf_target = opt.conf_target
-max_count = opt.max_count
-patch_type = opt.patch_type
-patch_size = opt.patch_size
-image_size = opt.image_size
-train_size = opt.train_size
-test_size = opt.test_size
-plot_all = opt.plot_all 
+target = args.target
+conf_target = args.conf_target
+max_count = args.max_count
+transform_patch = args.patch_type
+patch_size = args.patch_size
+image_size = args.image_size
+train_size = args.train_size
+test_size = args.test_size
+plot_all = args.plot_all
 
 assert train_size + test_size <= 50000, "Traing set size + Test set size > Total dataset size"
 
 print("=> creating model ")
-netClassifier = pretrainedmodels.__dict__[opt.netClassifier](num_classes=1000, pretrained='imagenet')
-if opt.cuda:
+netClassifier = pretrainedmodels.__dict__[args.netClassifier](num_classes=1000, pretrained='imagenet')
+if args.cuda:
     netClassifier.cuda()
 
 
 print('==> Preparing data..')
 normalize = transforms.Normalize(mean=netClassifier.mean,
                                  std=netClassifier.std)
-idx = np.arange(50000)
+idx = np.arange(NUM_OF_CLASSES)
 np.random.shuffle(idx)
 training_idx = idx[:train_size]
-test_idx = idx[train_size:test_size]
+test_idx = idx[train_size:(train_size + test_size)]
+
 
 train_loader = torch.utils.data.DataLoader(
-    dset.ImageFolder('./imagenetdata/val', transforms.Compose([
-        transforms.Scale(round(max(netClassifier.input_size)*1.050)),
+    dset.ImageFolder(DATA_FOLDER, transforms.Compose([
+        transforms.Resize(round(max(netClassifier.input_size)*1.050)),
         transforms.CenterCrop(max(netClassifier.input_size)),
         transforms.ToTensor(),
         ToSpaceBGR(netClassifier.input_space=='BGR'),
@@ -102,11 +103,11 @@ train_loader = torch.utils.data.DataLoader(
         normalize,
     ])),
     batch_size=1, shuffle=False, sampler=SubsetRandomSampler(training_idx),
-    num_workers=opt.workers, pin_memory=True)
- 
+    num_workers=args.workers, pin_memory=True)
+
 test_loader = torch.utils.data.DataLoader(
-    dset.ImageFolder('./imagenetdata/val', transforms.Compose([
-        transforms.Scale(round(max(netClassifier.input_size)*1.050)),
+    dset.ImageFolder(DATA_FOLDER, transforms.Compose([
+        transforms.Resize(round(max(netClassifier.input_size)*1.050)),
         transforms.CenterCrop(max(netClassifier.input_size)),
         transforms.ToTensor(),
         ToSpaceBGR(netClassifier.input_space=='BGR'),
@@ -114,11 +115,11 @@ test_loader = torch.utils.data.DataLoader(
         normalize,
     ])),
     batch_size=1, shuffle=False, sampler=SubsetRandomSampler(test_idx),
-    num_workers=opt.workers, pin_memory=True)
+    num_workers=args.workers, pin_memory=True)
 
 min_in, max_in = netClassifier.input_range[0], netClassifier.input_range[1]
 min_in, max_in = np.array([min_in, min_in, min_in]), np.array([max_in, max_in, max_in])
-mean, std = np.array(netClassifier.mean), np.array(netClassifier.std) 
+mean, std = np.array(netClassifier.mean), np.array(netClassifier.std)
 min_out, max_out = np.min((min_in-mean)/std), np.max((max_in-mean)/std)
 
 
@@ -126,34 +127,24 @@ def train(epoch, patch, patch_shape):
     netClassifier.eval()
     success = 0
     total = 0
-    recover_time = 0
     for batch_idx, (data, labels) in enumerate(train_loader):
-        if opt.cuda:
+        if args.cuda:
             data = data.cuda()
             labels = labels.cuda()
         data, labels = Variable(data), Variable(labels)
 
         prediction = netClassifier(data)
  
-        # only computer adversarial examples on examples that are originally classified correctly        
-        if prediction.data.max(1)[1][0] != labels.data[0]:
+        is_model_misclassified = prediction.data.max(1)[1][0] != labels.data[0]
+        if is_model_misclassified:
             continue
      
         total += 1
-        
-        # transform path
-        data_shape = data.data.cpu().numpy().shape
-        if patch_type == 'circle':
-            patch, mask, patch_shape = circle_transform(patch, data_shape, patch_shape, image_size)
-        elif patch_type == 'square':
-            patch, mask  = square_transform(patch, data_shape, patch_shape, image_size)
-        patch, mask = torch.FloatTensor(patch), torch.FloatTensor(mask)
-        if opt.cuda:
-            patch, mask = patch.cuda(), mask.cuda()
-        patch, mask = Variable(patch), Variable(mask)
- 
+
+        mask, patch, patch_shape = patch_transformation(data, patch, patch_shape)
+
         adv_x, mask, patch = attack(data, patch, mask)
-        
+
         adv_label = netClassifier(adv_x).data.max(1)[1][0]
         ori_label = labels.data[0]
         
@@ -162,10 +153,10 @@ def train(epoch, patch, patch_shape):
       
             if plot_all == 1: 
                 # plot source image
-                vutils.save_image(data.data, "./%s/%d_%d_original.png" %(opt.outf, batch_idx, ori_label), normalize=True)
+                vutils.save_image(data.data, "./%s/%d_%d_%d_original.png" % (args.outf, epoch, batch_idx, ori_label), normalize=True)
                 
                 # plot adversarial image
-                vutils.save_image(adv_x.data, "./%s/%d_%d_adversarial.png" %(opt.outf, batch_idx, adv_label), normalize=True)
+                vutils.save_image(adv_x.data, "./%s/%d_%d__%d_adversarial.png" % (args.outf, epoch, batch_idx, adv_label,), normalize=True)
  
         masked_patch = torch.mul(mask, patch)
         patch = masked_patch.data.cpu().numpy()
@@ -181,12 +172,27 @@ def train(epoch, patch, patch_shape):
 
     return patch
 
+
+def patch_transformation(data, patch, patch_shape):
+    # transform path
+    data_shape = data.data.cpu().numpy().shape
+    if transform_patch == 'circle':
+        patch, mask, patch_shape = circle_transform(patch, data_shape, patch_shape, image_size)
+    elif transform_patch == 'square':
+        patch, mask = square_transform(patch, data_shape, patch_shape, image_size)
+    patch, mask = torch.FloatTensor(patch), torch.FloatTensor(mask)
+    if args.cuda:
+        patch, mask = patch.cuda(), mask.cuda()
+    patch, mask = Variable(patch), Variable(mask)
+    return mask, patch, patch_shape
+
+
 def test(epoch, patch, patch_shape):
     netClassifier.eval()
     success = 0
     total = 0
     for batch_idx, (data, labels) in enumerate(test_loader):
-        if opt.cuda:
+        if args.cuda:
             data = data.cuda()
             labels = labels.cuda()
         data, labels = Variable(data), Variable(labels)
@@ -197,19 +203,10 @@ def test(epoch, patch, patch_shape):
         if prediction.data.max(1)[1][0] != labels.data[0]:
             continue
       
-        total += 1 
-        
-        # transform path
-        data_shape = data.data.cpu().numpy().shape
-        if patch_type == 'circle':
-            patch, mask, patch_shape = circle_transform(patch, data_shape, patch_shape, image_size)
-        elif patch_type == 'square':
-            patch, mask = square_transform(patch, data_shape, patch_shape, image_size)
-        patch, mask = torch.FloatTensor(patch), torch.FloatTensor(mask)
-        if opt.cuda:
-            patch, mask = patch.cuda(), mask.cuda()
-        patch, mask = Variable(patch), Variable(mask)
- 
+        total += 1
+
+        mask, patch, patch_shape = patch_transformation(data, patch, patch_shape)
+
         adv_x = torch.mul((1-mask),data) + torch.mul(mask,patch)
         adv_x = torch.clamp(adv_x, min_out, max_out)
         
@@ -266,7 +263,7 @@ def attack(x, patch, mask):
         
         #print(count, conf_target, target_prob, y_argmax_prob)  
 
-        if count >= opt.max_count:
+        if count >= args.max_count:
             break
 
 
@@ -274,13 +271,13 @@ def attack(x, patch, mask):
 
 
 if __name__ == '__main__':
-    if patch_type == 'circle':
+    if transform_patch == 'circle':
         patch, patch_shape = init_patch_circle(image_size, patch_size) 
-    elif patch_type == 'square':
+    elif transform_patch == 'square':
         patch, patch_shape = init_patch_square(image_size, patch_size) 
     else:
         sys.exit("Please choose a square or circle patch")
     
-    for epoch in range(1, opt.epochs + 1):
+    for epoch in range(1, args.epochs + 1):
         patch = train(epoch, patch, patch_shape)
         test(epoch, patch, patch_shape)

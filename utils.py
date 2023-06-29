@@ -4,6 +4,7 @@ import time
 import math
 import numpy as np
 
+
 import torch
 import torch.nn as nn
 import torch.nn.init as init
@@ -11,7 +12,9 @@ from torch.autograd import Variable
 
 from scipy.ndimage.interpolation import rotate
 
-_, term_width = os.popen('stty size', 'r').read().split()
+from consts import *
+
+_, term_width = 1,20 #TODO: remove 1,20, write os.popen('stty size', 'r').read().split()
 term_width = int(term_width)
 
 TOTAL_BAR_LENGTH = 35.
@@ -126,32 +129,33 @@ def init_patch_circle(image_size, patch_size):
     image_size = image_size**2
     noise_size = int(image_size*patch_size)
     radius = int(math.sqrt(noise_size/math.pi))
-    patch = np.zeros((1, 3, radius*2, radius*2))    
-    for i in range(3):
-        a = np.zeros((radius*2, radius*2))    
-        cx, cy = radius, radius # The center of circle 
+    patch = np.zeros((1, IN_CHANNELS_NUM, radius*2, radius*2))
+    for i in range(IN_CHANNELS_NUM):
+        patch_channel_i = np.zeros((radius*2, radius*2))
+        cx, cy = radius, radius # The center of circle
         y, x = np.ogrid[-radius: radius, -radius: radius]
         index = x**2 + y**2 <= radius**2
-        a[cy-radius:cy+radius, cx-radius:cx+radius][index] = np.random.rand()
-        idx = np.flatnonzero((a == 0).all((1)))
-        a = np.delete(a, idx, axis=0)
-        patch[0][i] = np.delete(a, idx, axis=1)
+        patch_channel_i[cy-radius:cy+radius, cx-radius:cx+radius][index] = np.random.rand()
+        idx = np.flatnonzero((patch_channel_i == 0).all((1)))
+        patch_channel_i = np.delete(patch_channel_i, idx, axis=0)
+        patch[0][i] = np.delete(patch_channel_i, idx, axis=1)
     return patch, patch.shape
 
 
 def circle_transform(patch, data_shape, patch_shape, image_size):
     # get dummy image 
     x = np.zeros(data_shape)
-   
+
     # get shape
     m_size = patch_shape[-1]
-    
-    for i in range(x.shape[0]):
+
+    batch_size = data_shape[0]
+    for i in range(batch_size):
 
         # random rotation
-        rot = np.random.choice(360)
+        rotation_angle = np.random.choice(360)
         for j in range(patch[i].shape[0]):
-            patch[i][j] = rotate(patch[i][j], angle=rot, reshape=False)
+            patch[i][j] = rotate(patch[i][j], angle=rotation_angle, reshape=False)
         
         # random location
         random_x = np.random.choice(image_size)
