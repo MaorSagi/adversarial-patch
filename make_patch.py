@@ -102,7 +102,7 @@ train_loader = torch.utils.data.DataLoader(
         ToRange255(max(netClassifier.input_range)==255),
         normalize,
     ])),
-    batch_size=1, shuffle=False, sampler=SubsetRandomSampler(training_idx),
+    batch_size=16, shuffle=False, sampler=SubsetRandomSampler(training_idx),
     num_workers=args.workers, pin_memory=True)
 
 test_loader = torch.utils.data.DataLoader(
@@ -114,7 +114,7 @@ test_loader = torch.utils.data.DataLoader(
         ToRange255(max(netClassifier.input_range)==255),
         normalize,
     ])),
-    batch_size=1, shuffle=False, sampler=SubsetRandomSampler(test_idx),
+    batch_size=16, shuffle=False, sampler=SubsetRandomSampler(test_idx),
     num_workers=args.workers, pin_memory=True)
 
 min_in, max_in = netClassifier.input_range[0], netClassifier.input_range[1]
@@ -176,6 +176,8 @@ def train(epoch, patch, patch_shape):
 def patch_transformation(data, patch, patch_shape):
     # transform path
     data_shape = data.data.cpu().numpy().shape
+    batch_size = data_shape[0]
+    patch = np.repeat(patch,batch_size,axis=0) # TODO: batch of data, duplicate patch to all dimensions
     if transform_patch == 'circle':
         patch, mask, patch_shape = circle_transform(patch, data_shape, patch_shape, image_size)
     elif transform_patch == 'square':

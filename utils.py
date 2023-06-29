@@ -150,13 +150,13 @@ def circle_transform(patch, data_shape, patch_shape, image_size):
     m_size = patch_shape[-1]
 
     batch_size = data_shape[0]
+
     for i in range(batch_size):
 
-        # random rotation
-        rotation_angle = np.random.choice(360)
+        random_rotation_angle = np.random.choice(360)
         for j in range(patch[i].shape[0]):
-            patch[i][j] = rotate(patch[i][j], angle=rotation_angle, reshape=False)
-        
+            patch[i][j] = rotate(patch[i][j], angle=random_rotation_angle, reshape=False)
+
         # random location
         random_x = np.random.choice(image_size)
         if random_x + m_size > x.shape[-1]:
@@ -166,7 +166,7 @@ def circle_transform(patch, data_shape, patch_shape, image_size):
         if random_y + m_size > x.shape[-1]:
             while random_y + m_size > x.shape[-1]:
                 random_y = np.random.choice(image_size)
-       
+
         # apply patch to dummy image  
         x[i][0][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[i][0]
         x[i][1][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[i][1]
