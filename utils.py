@@ -14,7 +14,7 @@ from scipy.ndimage.interpolation import rotate
 
 from consts import *
 
-_, term_width = 1, write os.popen('stty size', 'r').read().split() #TODO: write 1,20
+_, term_width = 1, os.popen('stty size', 'r').read().split() #TODO: write 1,20
 term_width = int(term_width)
 
 TOTAL_BAR_LENGTH = 35.
