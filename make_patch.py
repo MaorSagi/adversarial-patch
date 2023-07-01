@@ -215,7 +215,7 @@ def test(epoch, patch, patch_shape):
         adv_x = torch.mul((1 - mask), data) + torch.mul(mask, patch)
         adv_x = torch.clamp(adv_x, min_out, max_out)
 
-        adv_label = netClassifier(adv_x).data.max(1)[1].tolist()  # TODO: change to conf of 90%?
+        adv_label = netClassifier(adv_x).data.max(1)[1].tolist()
 
         batch_successful_attacks = adv_label.count(target)
         if batch_successful_attacks > 0:

@@ -14,7 +14,7 @@ from scipy.ndimage.interpolation import rotate
 
 from consts import *
 
-_, term_width = 1,20 #TODO: remove 1,20, write os.popen('stty size', 'r').read().split()
+_, term_width = 1, write os.popen('stty size', 'r').read().split() #TODO: write 1,20
 term_width = int(term_width)
 
 TOTAL_BAR_LENGTH = 35.
@@ -153,7 +153,7 @@ def init_patch_circle(image_size, patch_size, batch_size):
         idx = np.flatnonzero((patch_channel_i == 0).all((1)))
         patch_channel_i = np.delete(patch_channel_i, idx, axis=0)
         patch[0][i] = np.delete(patch_channel_i, idx, axis=1)
-    patch = np.repeat(patch, batch_size, axis=0)  # TODO: batch of data, duplicate patch to all dimensions
+    patch = np.repeat(patch, batch_size, axis=0)
     return patch, patch.shape
 
 
@@ -199,7 +199,7 @@ def init_patch_square(image_size, patch_size,batch_size):
     noise_size = image_size*patch_size
     noise_dim = int(noise_size**(0.5))
     patch = np.random.rand(1,3,noise_dim,noise_dim)
-    patch = np.repeat(patch, batch_size, axis=0)  # TODO: batch of data, duplicate patch to all dimensions
+    patch = np.repeat(patch, batch_size, axis=0)
     return patch, patch.shape
 
 
