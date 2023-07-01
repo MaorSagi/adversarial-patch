@@ -20,6 +20,20 @@ term_width = int(term_width)
 TOTAL_BAR_LENGTH = 35.
 last_time = time.time()
 begin_time = last_time
+
+
+def time_wrapper(func):
+    def wrap(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        end = time.time()
+        minutes = (end - start) / 60
+        if minutes>2:
+            print("Attack time: %s" % format_time(end - start))
+        return result
+    return wrap
+
+
 def progress_bar(current, total, msg=None):
     global last_time, begin_time
     if current == 0:
@@ -125,7 +139,7 @@ class ToRange255(object):
         return tensor
 
 
-def init_patch_circle(image_size, patch_size):
+def init_patch_circle(image_size, patch_size, batch_size):
     image_size = image_size**2
     noise_size = int(image_size*patch_size)
     radius = int(math.sqrt(noise_size/math.pi))
@@ -139,6 +153,7 @@ def init_patch_circle(image_size, patch_size):
         idx = np.flatnonzero((patch_channel_i == 0).all((1)))
         patch_channel_i = np.delete(patch_channel_i, idx, axis=0)
         patch[0][i] = np.delete(patch_channel_i, idx, axis=1)
+    patch = np.repeat(patch, batch_size, axis=0)  # TODO: batch of data, duplicate patch to all dimensions
     return patch, patch.shape
 
 
@@ -178,12 +193,13 @@ def circle_transform(patch, data_shape, patch_shape, image_size):
     return x, mask, patch.shape
 
 
-def init_patch_square(image_size, patch_size):
+def init_patch_square(image_size, patch_size,batch_size):
     # get mask
     image_size = image_size**2
     noise_size = image_size*patch_size
     noise_dim = int(noise_size**(0.5))
     patch = np.random.rand(1,3,noise_dim,noise_dim)
+    patch = np.repeat(patch, batch_size, axis=0)  # TODO: batch of data, duplicate patch to all dimensions
     return patch, patch.shape
 
 
