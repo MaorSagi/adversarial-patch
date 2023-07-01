@@ -161,7 +161,7 @@ def train(epoch, patch, patch_shape):
 
         model_misclassified_rate = get_model_misclassification_rate(data, ground_truth)
         if model_misclassified_rate > 0.8:
-            log("%d/%d Train: model misclassified rate %.3f, skip" % (epoch,epochs,model_misclassified_rate))
+            # log("%d/%d Train: model misclassified rate %.3f, skip" % (epoch,epochs,model_misclassified_rate))
             continue
 
         total += batch_size
@@ -228,7 +228,7 @@ def test(epoch, patch, patch_shape):
 
         model_misclassified_rate = get_model_misclassification_rate(data,  labels.data)
         if model_misclassified_rate > 0.8:
-            log("%d/%d Test: model misclassified rate %.3f, skip" % (epoch,epochs,model_misclassified_rate))
+            # log("%d/%d Test: model misclassified rate %.3f, skip" % (epoch,epochs,model_misclassified_rate))
             continue
 
         total += batch_size

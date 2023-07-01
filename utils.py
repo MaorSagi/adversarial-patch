@@ -26,7 +26,7 @@ def time_wrapper(func):
         end = time.time()
         minutes = (end - start) / 60
         if minutes>2:
-            print("Attack time: %s" % format_time(end - start))
+            log("Attack time: %s" % format_time(end - start))
         return result
     return wrap
 
