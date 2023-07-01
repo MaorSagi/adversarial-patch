@@ -50,16 +50,24 @@ parser.add_argument('--learning_rate', type=float, default=1.0, help='Training l
 
 
 args = parser.parse_args()
-print(args)
+log(str(args))
 
 try:
     os.makedirs(args.outf)
 except OSError:
     pass
 
+if torch.cuda.is_available():
+    if not args.cuda:
+        log("WARNING: You have a CUDA device, so you should probably run with --cuda")
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+device = torch.device(dev)
+
 if args.manualSeed is None:
     args.manualSeed = random.randint(1, 10000)
-print("Random Seed: ", args.manualSeed)
+log("Random Seed: %d" % args.manualSeed)
 random.seed(args.manualSeed)
 np.random.seed(args.manualSeed)
 torch.manual_seed(args.manualSeed)
@@ -68,8 +76,9 @@ if args.cuda:
 
 cudnn.benchmark = True
 
-if torch.cuda.is_available() and not args.cuda:
-    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+
+
+
 
 target = args.target
 conf_target = args.conf_target
@@ -82,15 +91,16 @@ test_size = args.test_size
 plot_all = args.plot_all
 batch_size = args.batch_size
 learning_rate = args.learning_rate
+epochs = args.epochs
+
 
 assert train_size + test_size <= 50000, "Traing set size + Test set size > Total dataset size"
-
-print("=> creating model ")
+log("Creating model ")
 netClassifier = pretrainedmodels.__dict__[args.netClassifier](num_classes=1000, pretrained='imagenet')
 if args.cuda:
     netClassifier.cuda()
 
-print('==> Preparing data..')
+log('Preparing data')
 normalize = transforms.Normalize(mean=netClassifier.mean,
                                  std=netClassifier.std)
 idx = np.arange(NUM_OF_CLASSES)
@@ -126,6 +136,16 @@ min_in, max_in = netClassifier.input_range[0], netClassifier.input_range[1]
 min_in, max_in = np.array([min_in, min_in, min_in]), np.array([max_in, max_in, max_in])
 mean, std = np.array(netClassifier.mean), np.array(netClassifier.std)
 min_out, max_out = np.min((min_in - mean) / std), np.max((max_in - mean) / std)
+begin_time = time.time()
+def compute_train_step_time():
+    global begin_time
+
+    cur_time = time.time()
+    total_time = cur_time - begin_time
+    begin_time = time.time()
+
+    return total_time
+
 
 
 def train(epoch, patch, patch_shape):
@@ -141,6 +161,7 @@ def train(epoch, patch, patch_shape):
 
         model_misclassified_rate = get_model_misclassification_rate(data, ground_truth)
         if model_misclassified_rate > 0.8:
+            log("%d/%d Train: model misclassified rate %.3f, skip" % (epoch,epochs,model_misclassified_rate))
             continue
 
         total += batch_size
@@ -175,8 +196,9 @@ def train(epoch, patch, patch_shape):
         patch = new_patch
 
         # log to file
-        progress_bar(batch_idx, len(train_loader), "%d Train Patch Success: %.3f" % (epoch, success / total))
-    # print("Train: %d, Rate %.2f" % (epoch, success / total))
+        # progress_bar(batch_idx, len(train_loader), "%d/%d Train Patch Success: %.3f" % (epoch,epochs, success / total))
+    total_time = compute_train_step_time()
+    log("%d/%d Train Patch Success: %.3f | Total time: %s" % (epoch,epochs, success / total,format_time(total_time)))
     return patch, success / total
 
 
@@ -206,6 +228,7 @@ def test(epoch, patch, patch_shape):
 
         model_misclassified_rate = get_model_misclassification_rate(data,  labels.data)
         if model_misclassified_rate > 0.8:
+            log("%d/%d Test: model misclassified rate %.3f, skip" % (epoch,epochs,model_misclassified_rate))
             continue
 
         total += batch_size
@@ -231,15 +254,15 @@ def test(epoch, patch, patch_shape):
         patch = new_patch
 
         # log to file
-        progress_bar(batch_idx, len(test_loader), "%d Test Success: %.3f"% (epoch, success / total))
-    # print("Test: %d, Rate %.2f"%(epoch,success / total))
+        # progress_bar(batch_idx, len(test_loader), "%d Test Patch Success: %.3f"% (epoch, success / total))
+    total_time = compute_train_step_time()
+    log("%d/%d Test Patch Success: %.3f | Total time: %s" % (epoch,epochs, success / total, format_time(total_time)))
     return success / total
 
 
 def get_model_misclassification_rate(data, ground_truth):
     prediction = netClassifier(data).data.max(1)[1]
-    model_misclassified_rate = torch.sum(torch.eq(prediction,ground_truth)).item()
-    return model_misclassified_rate
+    return 1-(torch.sum(torch.eq(prediction,ground_truth)).item()/batch_size)
 
 
 @time_wrapper
@@ -292,11 +315,9 @@ if __name__ == '__main__':
     else:
         sys.exit("Please choose a square or circle patch")
     test_rate = 0
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(1, epochs + 1):
         if test_rate >= 0.8:
-            print("Early stop, epoch: %d" % epoch)
+            log("Early stop, epoch: %d/%d" % epoch,epochs)
             break
         patch, train_rate = train(epoch, patch, patch_shape)
-        # print("Test: epoch: %d, success rate:%d" % (epoch, train_rate))
         test_rate = test(epoch, patch, patch_shape)
-        # print("Test: epoch: %d, success rate:%d" % (epoch, test_rate))

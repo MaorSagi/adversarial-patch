@@ -18,9 +18,6 @@ _, term_width = 1, 20 # os.popen('stty size', 'r').read().split()
 term_width = int(term_width)
 
 TOTAL_BAR_LENGTH = 35.
-last_time = time.time()
-begin_time = last_time
-
 
 def time_wrapper(func):
     def wrap(*args, **kwargs):
@@ -76,6 +73,22 @@ def progress_bar(current, total, msg=None):
     else:
         sys.stdout.write('\n')
     sys.stdout.flush()
+
+def log(msg, log_path=LOG_PATH, to_print=True):
+    import logging
+    from datetime import datetime
+
+    timestamp=datetime.now().strftime("%d-%m-%Y %H:%M")
+    logging.basicConfig(
+        filename=f'{log_path}/execution_{timestamp}.log',
+        format='%(asctime)s %(message)s',
+        level=logging.INFO,
+        datefmt='%Y-%m-%d %H:%M:%S')
+
+    logging.info(msg)
+    if to_print:
+        print(timestamp, msg)
+
 
 def format_time(seconds):
     days = int(seconds / 3600/24)
